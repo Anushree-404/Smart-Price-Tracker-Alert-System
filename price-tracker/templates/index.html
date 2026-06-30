@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Price Tracker</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-icon">📊</span>
+        <h1>Smart Price Tracker</h1>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-outline btn-icon-only"
+          onclick="toggleTheme()" title="Toggle dark mode"
+          aria-label="Toggle dark mode">
+          <span id="themeIcon">🌙</span>
+        </button>
+        <button id="refreshBtn" class="btn btn-outline" onclick="manualRefresh()">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-text">Refresh Prices</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Stats bar ────────────────────────────────────────────────────────── -->
+  <section class="stats-bar" aria-label="Summary statistics">
+    <div class="stat-card">
+      <div class="stat-icon" aria-hidden="true">📦</div>
+      <div class="stat-info">
+        <span class="stat-value" id="statProducts">—</span>
+        <span class="stat-label">Products Tracked</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" aria-hidden="true">💰</div>
+      <div class="stat-info">
+        <span class="stat-value" id="statSavings">—</span>
+        <span class="stat-label">Total Savings</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" aria-hidden="true">🔔</div>
+      <div class="stat-info">
+        <span class="stat-value" id="statAlerts">—</span>
+        <span class="stat-label">Active Alerts</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Main content ─────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Add product form -->
+    <section class="add-product-section card" aria-labelledby="addFormTitle">
+      <h2 class="section-title" id="addFormTitle">Track a New Product</h2>
+
+      <!-- Mode toggle -->
+      <div class="mode-toggle" role="group" aria-label="Entry mode">
+        <button id="modeAuto"   class="mode-btn active" onclick="setMode('auto')">🔗 Auto (Scrape URL)</button>
+        <button id="modeManual" class="mode-btn"        onclick="setMode('manual')">✏️ Manual Entry</button>
+      </div>
+
+      <!-- Auto mode form -->
+      <form id="addForm" onsubmit="addProduct(event)" novalidate>
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label for="productUrl">Product URL <span class="label-hint">(Amazon, Flipkart, Myntra, Meesho, Ajio, Nykaa, Pantaloons)</span></label>
+            <input
+              type="url"
+              id="productUrl"
+              placeholder="https://www.myntra.com/... or amazon.in/dp/... or ajio.com/..."
+              required
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <div class="form-group">
+            <label for="alertEmail">Email for Alerts</label>
+            <input
+              type="email"
+              id="alertEmail"
+              placeholder="you@example.com"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="thresholdSlider">
+              Alert when price drops by
+              <strong><span id="thresholdVal">5</span>%</strong>
+            </label>
+            <input
+              type="range"
+              id="thresholdSlider"
+              min="1"
+              max="90"
+              value="5"
+              aria-valuemin="1"
+              aria-valuemax="90"
+              aria-valuenow="5"
+              oninput="
+                document.getElementById('thresholdVal').textContent = this.value;
+                this.setAttribute('aria-valuenow', this.value);
+              "
+            />
+            <div class="slider-labels" aria-hidden="true">
+              <span>1%</span><span>45%</span><span>90%</span>
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" id="addBtn">
+          <span class="btn-icon" aria-hidden="true">➕</span> Add Product
+        </button>
+      </form>
+
+      <!-- Manual mode form (shown for Ajio / bot-blocked sites) -->
+      <form id="manualForm" onsubmit="addProductManual(event)" novalidate style="display:none">
+        <p class="manual-hint">
+          🛡️ Use this for <strong>Ajio</strong> or any site that blocks automated scraping.
+          Enter the product details yourself, then update the price manually anytime via the 🔄 button on the card.
+        </p>
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label for="manualUrl">Product URL</label>
+            <input type="url" id="manualUrl" placeholder="https://www.ajio.com/product/p/12345678_colour" required autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="form-group full-width">
+            <label for="manualName">Product Name</label>
+            <input type="text" id="manualName" placeholder="e.g. Liboza Women Embroidered Short Kurta" required />
+          </div>
+          <div class="form-group">
+            <label for="manualPrice">Current Price (₹)</label>
+            <input type="number" id="manualPrice" placeholder="e.g. 899" min="0" step="0.01" required />
+          </div>
+          <div class="form-group">
+            <label for="manualEmail">Email for Alerts</label>
+            <input type="email" id="manualEmail" placeholder="you@example.com" required />
+          </div>
+          <div class="form-group full-width">
+            <label for="manualThresholdSlider">
+              Alert when price drops by
+              <strong><span id="manualThresholdVal">5</span>%</strong>
+            </label>
+            <input
+              type="range"
+              id="manualThresholdSlider"
+              min="1" max="90" value="5"
+              oninput="document.getElementById('manualThresholdVal').textContent = this.value"
+            />
+            <div class="slider-labels" aria-hidden="true">
+              <span>1%</span><span>45%</span><span>90%</span>
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" id="manualAddBtn">
+          <span class="btn-icon" aria-hidden="true">➕</span> Add Product Manually
+        </button>
+      </form>
+    </section>
+
+    <!-- Product list -->
+    <section class="products-section" aria-labelledby="productsTitle">
+      <div class="products-header">
+        <h2 class="section-title" id="productsTitle">Tracked Products</h2>
+        <span id="productCount" class="badge" aria-live="polite">0 products</span>
+      </div>
+
+      <!-- Search bar -->
+      <div class="search-wrap">
+        <span class="search-icon" aria-hidden="true">🔍</span>
+        <input
+          type="search"
+          id="searchInput"
+          class="search-input"
+          placeholder="Filter by name or site (Amazon, Flipkart)…"
+          oninput="onSearchInput()"
+          aria-label="Search tracked products"
+        />
+      </div>
+
+      <div id="productGrid" class="product-grid" role="list">
+        <div class="empty-state" id="emptyState" role="listitem">
+          <div class="empty-icon" aria-hidden="true">🔍</div>
+          <p>No products tracked yet.</p>
+          <p class="empty-sub">Add an Amazon or Flipkart product URL above to get started.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Footer ───────────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <span id="schedulerStatus" aria-live="polite">⏰ Loading scheduler status…</span>
+  </footer>
+
+  <!-- ── Price History Modal ───────────────────────────────────────────────── -->
+  <div id="historyModal"
+    class="modal-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modalTitle"
+    onclick="closeModal(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modalTitle">Price History</h3>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Chart -->
+        <canvas id="historyChart" height="300"></canvas>
+
+        <!-- Summary stats -->
+        <div id="historyStats" class="history-stats"></div>
+
+        <!-- Alert management -->
+        <div id="alertsSection" class="alerts-section"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Toast container ──────────────────────────────────────────────────── -->
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
